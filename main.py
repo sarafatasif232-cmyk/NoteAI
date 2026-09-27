@@ -23,7 +23,7 @@ from typing import List, Optional
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 import google.generativeai as genai
@@ -234,16 +234,18 @@ async def generate_notes(audio: UploadFile = File(...)):
 
 
 # ---------------------------------------------------------------------------
-# Serve the frontend (must be mounted AFTER the /api/* routes above so those
-# take priority; this mount catches every other path, e.g. "/" and "/index.html").
-# Visiting http://localhost:8000/ now serves the whole app from one origin,
-# so there's no cross-origin / file:// fetch failure to worry about.
+# Serve the frontend. This is a single, explicit route rather than a
+# catch-all StaticFiles mount, so it can never shadow /api/* routes
+# regardless of registration order.
 # ---------------------------------------------------------------------------
-FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
-if FRONTEND_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
-else:
-    logger.warning("Frontend directory not found at %s — only the API will be served.", FRONTEND_DIR)
+FRONTEND_INDEX = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
+
+
+@app.get("/")
+def serve_frontend():
+    if not FRONTEND_INDEX.exists():
+        raise HTTPException(status_code=404, detail=f"frontend/index.html not found at {FRONTEND_INDEX}")
+    return FileResponse(FRONTEND_INDEX)
 
 
 if __name__ == "__main__":
